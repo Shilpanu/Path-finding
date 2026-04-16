@@ -1,0 +1,281 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Pathfinding Visualizer</title>
+<style>
+  body { font-family: Arial; text-align: center; background: #111; color: white; }
+  canvas { background: #222; margin-top: 10px; cursor: crosshair; }
+  button, select { margin: 5px; padding: 8px; }
+</style>
+</head>
+<body>
+
+<h2>Pathfinding Visualizer (Hard)</h2>
+
+<select id="algo">
+  <option value="bfs">BFS</option>
+  <option value="dfs">DFS</option>
+  <option value="dijkstra">Dijkstra</option>
+  <option value="astar">A*</option>
+</select>
+
+<button onclick="start()">Start</button>
+<button onclick="clearGrid()">Clear</button>
+<button onclick="maze()">Maze</button>
+<label>
+<input type="checkbox" id="diag"> Diagonal
+</label>
+
+<p id="stats"></p>
+
+<canvas id="canvas" width="800" height="500"></canvas>
+
+<script>
+const canvas = document.getElementById("canvas");
+const ctx = canvas.getContext("2d");
+
+const rows = 25, cols = 40;
+const size = 20;
+
+let grid = [];
+let startNode, endNode;
+let mouseDown = false;
+
+// Node class
+class Node {
+  constructor(r, c) {
+    this.r = r;
+    this.c = c;
+    this.wall = false;
+    this.weight = 1;
+    this.visited = false;
+    this.dist = Infinity;
+    this.prev = null;
+  }
+}
+
+// Initialize grid
+function init() {
+  grid = [];
+  for (let r = 0; r < rows; r++) {
+    let row = [];
+    for (let c = 0; c < cols; c++) {
+      row.push(new Node(r, c));
+    }
+    grid.push(row);
+  }
+  startNode = grid[2][2];
+  endNode = grid[20][30];
+}
+init();
+
+// Draw grid
+function draw() {
+  ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+  for (let row of grid) {
+    for (let n of row) {
+      if (n === startNode) ctx.fillStyle = "green";
+      else if (n === endNode) ctx.fillStyle = "red";
+      else if (n.wall) ctx.fillStyle = "black";
+      else if (n.visited) ctx.fillStyle = "blue";
+      else ctx.fillStyle = "#444";
+
+      ctx.fillRect(n.c * size, n.r * size, size-1, size-1);
+    }
+  }
+}
+draw();
+
+// Mouse draw walls
+canvas.onmousedown = () => mouseDown = true;
+canvas.onmouseup = () => mouseDown = false;
+
+canvas.onmousemove = (e) => {
+  if (!mouseDown) return;
+
+  let rect = canvas.getBoundingClientRect();
+  let x = Math.floor((e.clientX - rect.left)/size);
+  let y = Math.floor((e.clientY - rect.top)/size);
+
+  let node = grid[y][x];
+  if (node !== startNode && node !== endNode)
+    node.wall = true;
+
+  draw();
+};
+
+// Get neighbors
+function neighbors(n) {
+  const dirs = [[1,0],[-1,0],[0,1],[0,-1]];
+  if (document.getElementById("diag").checked)
+    dirs.push([1,1],[-1,-1],[1,-1],[-1,1]);
+
+  let result = [];
+
+  for (let [dr,dc] of dirs) {
+    let r = n.r + dr;
+    let c = n.c + dc;
+    if (r>=0 && c>=0 && r<rows && c<cols)
+      result.push(grid[r][c]);
+  }
+  return result;
+}
+
+// BFS
+function bfs() {
+  let q = [startNode];
+  startNode.visited = true;
+
+  while (q.length) {
+    let n = q.shift();
+    if (n === endNode) return;
+
+    for (let nb of neighbors(n)) {
+      if (!nb.visited && !nb.wall) {
+        nb.visited = true;
+        nb.prev = n;
+        q.push(nb);
+      }
+    }
+  }
+}
+
+// DFS
+function dfs() {
+  let stack = [startNode];
+  startNode.visited = true;
+
+  while (stack.length) {
+    let n = stack.pop();
+    if (n === endNode) return;
+
+    for (let nb of neighbors(n)) {
+      if (!nb.visited && !nb.wall) {
+        nb.visited = true;
+        nb.prev = n;
+        stack.push(nb);
+      }
+    }
+  }
+}
+
+// Dijkstra
+function dijkstra() {
+  startNode.dist = 0;
+  let pq = [startNode];
+
+  while (pq.length) {
+    pq.sort((a,b)=>a.dist-b.dist);
+    let n = pq.shift();
+
+    if (n === endNode) return;
+
+    for (let nb of neighbors(n)) {
+      if (nb.wall) continue;
+
+      let d = n.dist + nb.weight;
+      if (d < nb.dist) {
+        nb.dist = d;
+        nb.prev = n;
+        pq.push(nb);
+      }
+    }
+  }
+}
+
+// A*
+function astar() {
+  startNode.dist = 0;
+  let open = [startNode];
+
+  function h(a,b) {
+    return Math.abs(a.r-b.r)+Math.abs(a.c-b.c);
+  }
+
+  while (open.length) {
+    open.sort((a,b)=>(a.dist+h(a,endNode))-(b.dist+h(b,endNode)));
+    let n = open.shift();
+
+    if (n === endNode) return;
+
+    for (let nb of neighbors(n)) {
+      if (nb.wall) continue;
+
+      let d = n.dist + 1;
+      if (d < nb.dist) {
+        nb.dist = d;
+        nb.prev = n;
+        open.push(nb);
+      }
+    }
+  }
+}
+
+// Animate path
+async function animatePath() {
+  let path = [];
+  let cur = endNode;
+
+  while (cur) {
+    path.push(cur);
+    cur = cur.prev;
+  }
+
+  for (let n of path.reverse()) {
+    ctx.fillStyle = "yellow";
+    ctx.fillRect(n.c*size, n.r*size, size-1, size-1);
+    await new Promise(r=>setTimeout(r,30));
+  }
+}
+
+// Reset
+function reset() {
+  for (let row of grid)
+    for (let n of row) {
+      n.visited = false;
+      n.prev = null;
+      n.dist = Infinity;
+    }
+}
+
+// Start
+async function start() {
+  reset();
+  let t1 = performance.now();
+
+  let algo = document.getElementById("algo").value;
+
+  if (algo==="bfs") bfs();
+  if (algo==="dfs") dfs();
+  if (algo==="dijkstra") dijkstra();
+  if (algo==="astar") astar();
+
+  let t2 = performance.now();
+
+  draw();
+  await animatePath();
+
+  document.getElementById("stats").innerText =
+    "Time: " + (t2-t1).toFixed(2) + " ms";
+}
+
+// Clear
+function clearGrid() {
+  init();
+  draw();
+}
+
+// Simple maze
+function maze() {
+  for (let row of grid)
+    for (let n of row)
+      n.wall = Math.random() < 0.3;
+
+  draw();
+}
+
+</script>
+</body>
+</html>
